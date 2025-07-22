@@ -8,6 +8,7 @@ import os
 import glob
 import pyperclip
 import webbrowser
+import re
 
 # --- CONFIG ---
 CARRIER_TRACKING_URLS = {
@@ -93,20 +94,36 @@ def get_tracking_url(carrier):
             return CARRIER_TRACKING_URLS[key]
     return None
 
+def is_today_or_prev_business_day(date_obj):
+    today = datetime.now().date()
+    weekday = today.weekday()
+    if weekday == 0:  # Monday
+        prev_business_day = today - timedelta(days=3)
+    else:
+        prev_business_day = today - timedelta(days=1)
+    return date_obj == today or date_obj == prev_business_day
+
+
 def filter_shipments(shipments):
     filtered = []
-    now = datetime.now()
     for s in shipments:
+        status = s.get('status', '').lower()
         eta = s.get('eta', '').lower()
-        if eta == 'pending pickup' or eta == 'unknown carrier' or eta == 'tbd (tracking not yet implemented)':
-            filtered.append(s)
+        if 'void' in status:
+            continue  # Skip void/voided
+        if 'delivered' in status:
+            # Try to parse the delivered date from eta
+            match = re.search(r'(\d{2}/\d{2}/\d{4})', eta)
+            if match:
+                try:
+                    delivered_date = datetime.strptime(match.group(1), '%m/%d/%Y').date()
+                    if is_today_or_prev_business_day(delivered_date):
+                        filtered.append(s)
+                except Exception:
+                    continue  # Skip if date can't be parsed
+            # If can't parse, skip
         else:
-            try:
-                eta_date = date_parser.parse(eta, fuzzy=True)
-                if eta_date >= now - timedelta(days=3):
-                    filtered.append(s)
-            except Exception:
-                filtered.append(s)  # If can't parse, include just in case
+            filtered.append(s)
     return filtered
 
 def draft_outlook_email(shipments):

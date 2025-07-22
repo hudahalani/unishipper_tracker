@@ -1,0 +1,4 @@
+playwright
+pandas
+python-dateutil
+pywin32 

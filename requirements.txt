@@ -1,4 +1,5 @@
 playwright
 pandas
 python-dateutil
-pywin32 
+pywin32
+pyperclip 

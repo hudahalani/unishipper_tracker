@@ -6,6 +6,8 @@ import win32com.client as win32
 from dateutil import parser as date_parser
 import os
 import glob
+import pyperclip
+import webbrowser
 
 # --- CONFIG ---
 CARRIER_TRACKING_URLS = {
@@ -108,40 +110,45 @@ def filter_shipments(shipments):
     return filtered
 
 def draft_outlook_email(shipments):
-    outlook = win32.Dispatch('outlook.application')
-    mail = outlook.CreateItem(0)
-    mail.Subject = EMAIL_SUBJECT
-    body = f"<p>{EMAIL_GREETING}</p>"
+    lines = [EMAIL_GREETING, ""]
     for s in shipments:
-        bol_line = f"<div>{s['bol']}</div>"
+        bol_line = s['bol']
         eta_val = s.get('eta', 'N/A')
         status = str(s.get('status', '')).lower()
         if s.get('eta', '').lower() == 'pending pickup':
-            eta_line = '<div><span style="background-color: yellow">not picked up</span></div>'
+            eta_line = 'not picked up'
         elif 'delivered' in status:
             try:
                 eta_date = date_parser.parse(eta_val, fuzzy=True)
                 eta_str = eta_date.strftime('%m/%d')
             except Exception:
                 eta_str = eta_val
-            eta_line = f'<div><span style="background-color: yellow">delivered on {eta_str}</span></div>'
+            eta_line = f'delivered on {eta_str}'
         elif 'in transit' in status:
             try:
                 eta_date = date_parser.parse(eta_val, fuzzy=True)
                 eta_str = eta_date.strftime('%m/%d')
             except Exception:
                 eta_str = eta_val
-            eta_line = f'<div><span style="background-color: yellow">eta is {eta_str}</span></div>'
+            eta_line = f'eta is {eta_str}'
         else:
             try:
                 eta_date = date_parser.parse(eta_val, fuzzy=True)
                 eta_str = eta_date.strftime('%m/%d')
             except Exception:
                 eta_str = eta_val
-            eta_line = f'<div><span style="background-color: yellow">ETA is {eta_str}</span></div>'
-        body += bol_line + eta_line + "<br>"
-    mail.HTMLBody = body.strip()
-    mail.Display()  # Opens the draft for review
+            eta_line = f'ETA is {eta_str}'
+        lines.append(bol_line)
+        lines.append(eta_line)
+        lines.append("")  # blank line between shipments
+    text_body = "\n".join(lines).strip()
+    pyperclip.copy(text_body)
+    print("Email text copied to clipboard!\nOpening Outlook web compose page...")
+    to = 'hudahalani@gmail.com'
+    subject = 'Unishipper Tracking'
+    url = f"https://outlook.office.com/mail/deeplink/compose?to={to}&subject={subject}"
+    webbrowser.open_new_tab(url)
+    print("Paste (Ctrl+V) the email body into the message area.")
 
 if __name__ == '__main__':
     asyncio.run(main()) 

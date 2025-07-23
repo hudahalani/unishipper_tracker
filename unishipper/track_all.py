@@ -4,6 +4,9 @@ import asyncio
 import re
 import io
 import sys
+import pyperclip
+import webbrowser
+import os
 
 from rnl import get_rl_eta
 from sefl import get_sefl_eta
@@ -49,46 +52,59 @@ def should_track(row):
 
 async def main():
     df = pd.read_csv(CSV_FILENAME)
-    results = []
+    email_lines = ["Hey Muhammad,", ""]
     for _, row in df.iterrows():
         if not should_track(row):
             continue
-        carrier = str(row['Carrier']).lower()
-        tracking_number = str(row['PRO/Tracking#']).strip()
         bol = str(row['BOL #']).strip()
+        tracking_number = str(row['PRO/Tracking#']).strip()
+        carrier = str(row['Carrier']).lower()
         if not tracking_number or tracking_number.lower() == 'nan':
-            result = f"BOL: {bol}\nCarrier: {carrier}\nPRO: {tracking_number}\nStatus: No tracking number available.\n{'-'*30}"
-            results.append(result)
-            continue
-        try:
-            old_stdout = sys.stdout
-            new_stdout = io.StringIO()
-            sys.stdout = new_stdout
-            if 'r&l' in carrier or 'rl carriers' in carrier:
-                await get_rl_eta(tracking_number)
-            elif 'southeastern' in carrier or 'sefl' in carrier:
-                await get_sefl_eta(tracking_number)
-            elif 'saia' in carrier:
-                await get_saia_eta(tracking_number)
-            elif 'forward' in carrier:
-                await get_forward_eta(tracking_number)
-            else:
-                print("Unknown carrier:", carrier)
-            sys.stdout = old_stdout
-            status = new_stdout.getvalue().strip()
-        except Exception as e:
-            sys.stdout = old_stdout
-            status = f"Error: {str(e)}"
-        result = f"BOL: {bol}\nCarrier: {carrier}\nPRO: {tracking_number}\nStatus: {status}\n{'-'*30}"
-        results.append(result)
-    # Write all results to a file
+            status = "not picked up yet"
+        else:
+            try:
+                old_stdout = sys.stdout
+                new_stdout = io.StringIO()
+                sys.stdout = new_stdout
+                if 'r&l' in carrier or 'rl carriers' in carrier:
+                    await get_rl_eta(tracking_number)
+                elif 'southeastern' in carrier or 'sefl' in carrier:
+                    await get_sefl_eta(tracking_number)
+                elif 'saia' in carrier:
+                    await get_saia_eta(tracking_number)
+                elif 'forward' in carrier:
+                    await get_forward_eta(tracking_number)
+                else:
+                    print("Unknown carrier:", carrier)
+                sys.stdout = old_stdout
+                status = new_stdout.getvalue().strip()
+                if status.lower().startswith('eta is'):
+                    # Capitalize 'ETA is' for consistency
+                    status = 'ETA is' + status[6:]
+            except Exception as e:
+                sys.stdout = old_stdout
+                status = f"Error: {str(e)}"
+        email_lines.append(bol)
+        email_lines.append(status)
+        email_lines.append("")  # blank line between shipments
+
+    email_body = "\n".join(email_lines).strip()
+
+    # Write to file
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     filename = f"tracking_results_{timestamp}.txt"
     with open(filename, 'w') as f:
-        f.write("Unishippers Tracking Results\n" + "="*50 + "\n\n")
-        for r in results:
-            f.write(r + "\n")
+        f.write(email_body)
     print(f"Tracking results saved to: {filename}")
+
+    # Copy results to clipboard and open Outlook web compose page
+    pyperclip.copy(email_body)
+    print("Tracking results copied to clipboard!")
+    to = os.getenv('UNISHIPPER_EMAILS', 'your@email.com;another@email.com')
+    subject = 'Unishipper Tracking'
+    url = f"https://outlook.office.com/mail/deeplink/compose?to={to}&subject={subject}"
+    webbrowser.open_new_tab(url)
+    print("Paste (Ctrl+V) the tracking results into the email body.")
 
 if __name__ == "__main__":
     asyncio.run(main()) 

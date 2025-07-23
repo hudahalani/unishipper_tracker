@@ -64,7 +64,7 @@ async def main():
             old_stdout = sys.stdout
             new_stdout = io.StringIO()
             sys.stdout = new_stdout
-            if 'r&l' in carrier:
+            if 'r&l' in carrier or 'rl carriers' in carrier:
                 await get_rl_eta(tracking_number)
             elif 'southeastern' in carrier or 'sefl' in carrier:
                 await get_sefl_eta(tracking_number)

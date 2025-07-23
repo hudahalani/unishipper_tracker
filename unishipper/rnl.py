@@ -27,11 +27,16 @@ async def get_rl_eta(pro_number):
                 eta_row = eta_locator.first
                 parent = await eta_row.evaluate_handle("el => el.parentElement")
                 parent_text = await parent.evaluate("el => el.textContent")
-                print("ETA row:", parent_text.strip())
+                # Extract only the date (MM/DD/YYYY) from the parent text
+                match = re.search(r"(\d{1,2}/\d{1,2}/\d{4})", parent_text)
+                if match:
+                    print(f"ETA {match.group(1)}")
+                else:
+                    print("Could not find ETA date.")
             else:
                 print("Could not find delivery status or ETA.")
 
         await browser.close()
 
 if __name__ == "__main__":
-    asyncio.run(get_rl_eta("I313183413"))
+    asyncio.run(get_rl_eta("I625453227"))

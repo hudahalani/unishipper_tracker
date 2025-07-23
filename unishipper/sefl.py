@@ -14,15 +14,12 @@ async def get_sefl_eta(tracking_number):
         textareas = await page.query_selector_all('textarea')
         if textareas:
             await textareas[0].fill(tracking_number)
-            print("Filled the first textarea with the tracking number.")
         else:
-            print("No textarea found.")
             await browser.close()
             return
 
         # Click the 'Submit Trace' button
         await page.get_by_role("button", name="Submit Trace").click()
-        print("Clicked the Submit Trace button.")
 
         # Wait for results to load
         await page.wait_for_timeout(5000)

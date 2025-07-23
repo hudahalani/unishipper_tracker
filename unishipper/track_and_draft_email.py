@@ -2,13 +2,17 @@ import asyncio
 from playwright.async_api import async_playwright
 import pandas as pd
 from datetime import datetime, timedelta
-import win32com.client as win32
-from dateutil import parser as date_parser
 import os
 import glob
-import pyperclip
-import webbrowser
 import re
+import io
+import sys
+
+# Import carrier tracking functions
+from rnl import get_rl_eta
+from sefl import get_sefl_eta
+from saia import get_saia_eta
+from forward import get_forward_eta
 
 # --- CONFIG ---
 CARRIER_TRACKING_URLS = {
@@ -19,8 +23,6 @@ CARRIER_TRACKING_URLS = {
     'XPO LOGISTICS': 'https://www.xpo.com/track/',
 }
 
-EMAIL_SUBJECT = 'Unishippers Tracking'
-EMAIL_GREETING = 'Hey Muhammad,'
 CSV_FILENAME = None
 for file in glob.glob("*.csv"):
     CSV_FILENAME = file
@@ -48,7 +50,7 @@ async def main():
         pro = str(row['PRO/Tracking#']).strip()
         eta = str(row.get('Estimated Delivery Date', '')).strip()
         status = str(row.get('Status', '')).strip().lower()
-        if 'void' in status:
+        if 'voided' in status:
             continue  # Skip voided shipments
         shipment = {
             'carrier': carrier,
@@ -56,37 +58,64 @@ async def main():
             'pro': pro,
             'eta': None,
             'raw_eta': eta,
-            'status': status,  # include status for email formatting
+            'status': status,
         }
         # If tracking number is empty, mark as pending pickup
         if not pro or pro.lower() == 'nan':
             shipment['eta'] = 'Pending Pickup'
         shipments.append(shipment)
 
-    # 3. Track shipments with tracking numbers
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
-        context = await browser.new_context()
-        page = await context.new_page()
-        for shipment in shipments:
-            if shipment['eta'] == 'Pending Pickup':
-                continue
-            carrier = shipment['carrier']
-            pro = shipment['pro']
-            tracking_url = get_tracking_url(carrier)
-            if not tracking_url:
+    # 3. Track shipments with tracking numbers using carrier-specific functions
+    for shipment in shipments:
+        if shipment['eta'] == 'Pending Pickup':
+            continue
+        carrier = shipment['carrier'].lower()
+        pro = shipment['pro']
+        
+        try:
+            if 'r&l' in carrier:
+                # Capture the output from get_rl_eta
+                old_stdout = sys.stdout
+                new_stdout = io.StringIO()
+                sys.stdout = new_stdout
+                await get_rl_eta(pro)
+                output = new_stdout.getvalue().strip()
+                sys.stdout = old_stdout
+                shipment['eta'] = output
+            elif 'southeastern' in carrier or 'sefl' in carrier:
+                old_stdout = sys.stdout
+                new_stdout = io.StringIO()
+                sys.stdout = new_stdout
+                await get_sefl_eta(pro)
+                output = new_stdout.getvalue().strip()
+                sys.stdout = old_stdout
+                shipment['eta'] = output
+            elif 'saia' in carrier:
+                old_stdout = sys.stdout
+                new_stdout = io.StringIO()
+                sys.stdout = new_stdout
+                await get_saia_eta(pro)
+                output = new_stdout.getvalue().strip()
+                sys.stdout = old_stdout
+                shipment['eta'] = output
+            elif 'forward' in carrier:
+                old_stdout = sys.stdout
+                new_stdout = io.StringIO()
+                sys.stdout = new_stdout
+                await get_forward_eta(pro)
+                output = new_stdout.getvalue().strip()
+                sys.stdout = old_stdout
+                shipment['eta'] = output
+            else:
                 shipment['eta'] = 'Unknown Carrier'
-                continue
-            # TODO: Implement carrier-specific tracking and ETA parsing
-            # shipment['eta'] = await track_and_parse_eta(page, tracking_url, carrier, pro)
-            shipment['eta'] = shipment['raw_eta'] if shipment['raw_eta'] else 'TBD (tracking not yet implemented)'
-        await browser.close()
+        except Exception as e:
+            shipment['eta'] = f'Error: {str(e)}'
 
     # 4. Filter shipments: not delivered or delivered within last 3 days
     filtered_shipments = filter_shipments(shipments)
 
-    # 5. Draft Outlook email
-    draft_outlook_email(filtered_shipments)
+    # 5. Write results to file
+    write_results_to_file(filtered_shipments)
 
 def get_tracking_url(carrier):
     for key in CARRIER_TRACKING_URLS:
@@ -102,7 +131,6 @@ def is_today_or_prev_business_day(date_obj):
     else:
         prev_business_day = today - timedelta(days=1)
     return date_obj == today or date_obj == prev_business_day
-
 
 def filter_shipments(shipments):
     filtered = []
@@ -126,46 +154,22 @@ def filter_shipments(shipments):
             filtered.append(s)
     return filtered
 
-def draft_outlook_email(shipments):
-    lines = [EMAIL_GREETING, ""]
-    for s in shipments:
-        bol_line = s['bol']
-        eta_val = s.get('eta', 'N/A')
-        status = str(s.get('status', '')).lower()
-        if s.get('eta', '').lower() == 'pending pickup':
-            eta_line = 'not picked up'
-        elif 'delivered' in status:
-            try:
-                eta_date = date_parser.parse(eta_val, fuzzy=True)
-                eta_str = eta_date.strftime('%m/%d')
-            except Exception:
-                eta_str = eta_val
-            eta_line = f'delivered on {eta_str}'
-        elif 'in transit' in status:
-            try:
-                eta_date = date_parser.parse(eta_val, fuzzy=True)
-                eta_str = eta_date.strftime('%m/%d')
-            except Exception:
-                eta_str = eta_val
-            eta_line = f'eta is {eta_str}'
-        else:
-            try:
-                eta_date = date_parser.parse(eta_val, fuzzy=True)
-                eta_str = eta_date.strftime('%m/%d')
-            except Exception:
-                eta_str = eta_val
-            eta_line = f'ETA is {eta_str}'
-        lines.append(bol_line)
-        lines.append(eta_line)
-        lines.append("")  # blank line between shipments
-    text_body = "\n".join(lines).strip()
-    pyperclip.copy(text_body)
-    print("Email text copied to clipboard!\nOpening Outlook web compose page...")
-    to = 'hudahalani@gmail.com'
-    subject = 'Unishipper Tracking'
-    url = f"https://outlook.office.com/mail/deeplink/compose?to={to}&subject={subject}"
-    webbrowser.open_new_tab(url)
-    print("Paste (Ctrl+V) the email body into the message area.")
+def write_results_to_file(shipments):
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"tracking_results_{timestamp}.txt"
+    
+    with open(filename, 'w') as f:
+        f.write("Unishippers Tracking Results\n")
+        f.write("=" * 50 + "\n\n")
+        
+        for s in shipments:
+            f.write(f"BOL: {s['bol']}\n")
+            f.write(f"Carrier: {s['carrier']}\n")
+            f.write(f"PRO: {s['pro']}\n")
+            f.write(f"Status: {s.get('eta', 'N/A')}\n")
+            f.write("-" * 30 + "\n")
+    
+    print(f"Tracking results saved to: {filename}")
 
 if __name__ == '__main__':
     asyncio.run(main()) 

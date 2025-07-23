@@ -52,7 +52,7 @@ async def get_forward_eta(tracking_number):
         if status_val:
             if "Invoiced" in status_val:
                 print("Delivered")
-            elif "Departed" in status_val and eta_val:
+            elif eta_val:
                 print(f"eta is {eta_val}")
             else:
                 print(status_val)
@@ -62,4 +62,4 @@ async def get_forward_eta(tracking_number):
         await browser.close()
 
 if __name__ == "__main__":
-    asyncio.run(get_forward_eta("93589424")) 
+    asyncio.run(get_forward_eta("93588227")) 

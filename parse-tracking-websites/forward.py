@@ -22,44 +22,24 @@ async def get_forward_eta(tracking_number):
             await browser.close()
             return
 
-        # ETA extraction: only the first date
-        eta_elem = await page.query_selector('div.delivery-date .copy')
-        eta_val = None
-        if eta_elem:
-            label_text = (await eta_elem.text_content()).strip()
-            if label_text == "Expected Delivery":
-                eta_full = await eta_elem.evaluate('el => el.nextElementSibling ? el.nextElementSibling.textContent.trim() : null')
-                if eta_full:
-                    # Extract only the first date (MM/DD/YYYY)
-                    match = re.search(r"(\d{2}/\d{2}/\d{4})", eta_full)
-                    if match:
-                        eta_val = match.group(1)
-
-        # Status extraction
-        progress_blocks = await page.query_selector_all('div.shipment-progress')
-        status_val = None
-        for block in progress_blocks:
-            label = await block.query_selector('div.copy')
-            if label:
-                label_text = (await label.text_content()).strip()
-                if label_text == "Status:":
-                    progress = await label.evaluate_handle('el => el.nextElementSibling')
-                    if progress:
-                        status_val = (await progress.text_content()).strip()
-                        break
-
-        # Print result based on status
-        if status_val:
-            if "Invoiced" in status_val:
-                print("Delivered")
-            elif eta_val:
-                print(f"eta is {eta_val}")
+        # Extract ETA from the correct div after clicking the arrow
+        eta_div = await page.query_selector('div.header.--small.headline')
+        if eta_div:
+            eta_text = (await eta_div.text_content()).strip()
+            # Try to extract only the date (MM/DD/YYYY) from the text
+            match = re.search(r'(\d{2}/\d{2}/\d{4})', eta_text)
+            if match:
+                print(f"eta is {match.group(1)}")
+                await browser.close()
+                return
             else:
-                print(status_val)
+                print(f"Found ETA div but could not extract date: {eta_text}")
+                await browser.close()
+                return
         else:
-            print("Could not find status in modal.")
-
-        await browser.close()
+            print("Could not find ETA div after clicking arrow.")
+            await browser.close()
+            return
 
 if __name__ == "__main__":
     asyncio.run(get_forward_eta("93588227")) 

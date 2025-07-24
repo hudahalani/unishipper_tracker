@@ -12,6 +12,7 @@ from rnl import get_rl_eta
 from sefl import get_sefl_eta
 from saia import get_saia_eta
 from forward import get_forward_eta
+from xpo import get_xpo_eta
 
 CSV_FILENAME = None
 import glob
@@ -50,14 +51,32 @@ def should_track(row):
         return False
     return True
 
+def try_read_csv(filename):
+    encodings = ['utf-8', 'cp1252', 'latin1']
+    for enc in encodings:
+        try:
+            df = pd.read_csv(filename, encoding=enc)
+            print(f"Read CSV using encoding: {enc}")
+            return df
+        except UnicodeDecodeError:
+            continue
+    print(f"Failed to read CSV with encodings: {encodings}")
+    exit(1)
+
 async def main():
-    df = pd.read_csv(CSV_FILENAME)
+    df = try_read_csv(CSV_FILENAME)
     email_lines = ["Hey Muhammad,", ""]
     for _, row in df.iterrows():
         if not should_track(row):
             continue
         bol = str(row['BOL #']).strip()
         tracking_number = str(row['PRO/Tracking#']).strip()
+        # Fix: Remove trailing .0 if present (Excel float issue)
+        if tracking_number.endswith('.0'):
+            try:
+                tracking_number = str(int(float(tracking_number)))
+            except Exception:
+                pass
         carrier = str(row['Carrier']).lower()
         if not tracking_number or tracking_number.lower() == 'nan':
             status = "not picked up yet"
@@ -74,6 +93,8 @@ async def main():
                     await get_saia_eta(tracking_number)
                 elif 'forward' in carrier:
                     await get_forward_eta(tracking_number)
+                elif 'xpo' in carrier or 'xpo logistics' in carrier:
+                    await get_xpo_eta(tracking_number)
                 else:
                     print("Unknown carrier:", carrier)
                 sys.stdout = old_stdout

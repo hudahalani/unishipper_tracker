@@ -24,15 +24,39 @@ async def get_sefl_eta(tracking_number):
         # Wait for results to load
         await page.wait_for_timeout(5000)
 
-        # Get the full page text and extract the delivery or estimated delivery date
-        full_text = await page.inner_text('body')
+        # Try to extract the estimated delivery date from the correct <td>
+        try:
+            # Find the <td> with 'Estimated Delivery:' and get its next sibling
+            td = await page.query_selector('td:text("Estimated Delivery:")')
+            if td:
+                sibling = await td.evaluate_handle('node => node.nextElementSibling')
+                if sibling:
+                    eta_text = await sibling.inner_text()
+                    eta_match = re.search(r'(\d{2}/\d{2}/\d{4})', eta_text)
+                    if eta_match:
+                        print("eta is", eta_match.group(1))
+                        await browser.close()
+                        return
+            # If not found, fallback to delivered date
+            delivered_td = await page.query_selector('td:text("Delivered")')
+            if delivered_td:
+                sibling = await delivered_td.evaluate_handle('node => node.nextElementSibling')
+                if sibling:
+                    delivered_text = await sibling.inner_text()
+                    delivered_match = re.search(r'(\d{2}/\d{2}/\d{4})', delivered_text)
+                    if delivered_match:
+                        print("Delivered", delivered_match.group(1))
+                        await browser.close()
+                        return
+        except Exception:
+            pass
 
-        # Try to find "Delivered MM/DD/YYYY"
+        # Fallback: search the full page text
+        full_text = await page.inner_text('body')
         delivered_match = re.search(r"Delivered\s+(\d{2}/\d{2}/\d{4})", full_text)
         if delivered_match:
             print("Delivered", delivered_match.group(1))
         else:
-            # If not delivered, try to find "Estimated Delivery: MM/DD/YYYY"
             eta_match = re.search(r"Estimated Delivery:\s*(\d{2}/\d{2}/\d{4})", full_text)
             if eta_match:
                 print("eta is", eta_match.group(1))

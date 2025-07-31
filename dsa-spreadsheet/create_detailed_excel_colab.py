@@ -4,29 +4,26 @@ from datetime import datetime
 import re
 from io import StringIO
 import pandas as pd
+from google.colab import files
+import zipfile
 
-def create_detailed_excel():
-    # Get the CSV file from the current directory
-    csv_files = [f for f in os.listdir('.') if f.endswith('.csv')]
+def create_detailed_excel_colab():
+    # Upload CSV file
+    print("Please upload your CSV file...")
+    uploaded = files.upload()
     
-    if not csv_files:
-        print("No CSV files found in the current directory")
+    if not uploaded:
+        print("No file uploaded!")
         return
     
-    # Use the newer CSV file (07_30_2025 10_16 PM.csv)
-    csv_file = None
-    for file in csv_files:
-        if '10_16' in file:  # This is the newer file
-            csv_file = file
-            break
+    # Get the uploaded file
+    csv_filename = list(uploaded.keys())[0]
+    csv_content = uploaded[csv_filename]
     
-    if not csv_file:
-        csv_file = csv_files[0]  # Fallback to first CSV file
-    
-    print(f"Processing file: {csv_file}")
+    print(f"Processing file: {csv_filename}")
     
     # Extract date from filename
-    date_match = re.search(r'(\d{2}_\d{2}_\d{4})', csv_file)
+    date_match = re.search(r'(\d{2}_\d{2}_\d{4})', csv_filename)
     if not date_match:
         print("Could not extract date from filename")
         return
@@ -37,25 +34,25 @@ def create_detailed_excel():
     # Store all records
     all_records = []
     
-    # Try different encodings to handle the file
-    encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
-    file_content = None
-    
-    for encoding in encodings:
-        try:
-            with open(csv_file, 'r', encoding=encoding) as file:
-                file_content = file.read()
-            print(f"Successfully read file with {encoding} encoding")
-            break
-        except UnicodeDecodeError:
-            continue
-    
-    if file_content is None:
-        print("Could not read file with any encoding")
-        return
+    # Parse CSV from the uploaded content
+    try:
+        # Try to decode as UTF-8 first
+        csv_text = csv_content.decode('utf-8')
+    except UnicodeDecodeError:
+        # If UTF-8 fails, try other encodings
+        for encoding in ['latin-1', 'cp1252', 'iso-8859-1']:
+            try:
+                csv_text = csv_content.decode(encoding)
+                print(f"Successfully decoded with {encoding} encoding")
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            print("Could not decode file with any encoding")
+            return
     
     # Parse CSV from the content
-    reader = csv.DictReader(StringIO(file_content))
+    reader = csv.DictReader(StringIO(csv_text))
     
     for row in reader:
         # Check if created date matches filename date
@@ -269,6 +266,10 @@ def create_detailed_excel():
         print(f"\nResults written to: {output_filename}")
         print(f"Total records processed: {len(all_records)}")
         print(f"Created sheets for: {', '.join(store_groups.keys())}")
+        
+        # Download the Excel file
+        files.download(output_filename)
+        
     else:
         # Create empty DataFrame with headers
         columns = ['DSA PO#', 'DSA Sales Order #', 'P/U Date', 'Shipper', 'Shipper Address', 'City', 'State', 'Zip', 
@@ -278,6 +279,8 @@ def create_detailed_excel():
         df = pd.DataFrame(columns=columns)
         df.to_excel(output_filename, sheet_name='All Records', index=False)
         print(f"\nNo records found. Empty Excel file created: {output_filename}")
+        files.download(output_filename)
 
+# Run the function
 if __name__ == "__main__":
-    create_detailed_excel() 
+    create_detailed_excel_colab() 

@@ -2,4 +2,5 @@ playwright
 pandas
 python-dateutil
 pywin32
-pyperclip 
+pyperclip
+openpyxl 

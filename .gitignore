@@ -1,0 +1,49 @@
+# CSV files - exclude all CSV data files
+*.csv
+
+# Excel files - exclude generated Excel files
+*.xlsx
+*.xls
+
+# Temporary Excel files
+~$*.xlsx
+~$*.xls
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Log files
+*.log
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Data files that might contain sensitive information
+*.txt
+!requirements.txt
+!README.txt
+!LICENSE.txt 
